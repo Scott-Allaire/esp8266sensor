@@ -3,8 +3,7 @@
 #include <ESP8266WiFi.h>
 #include "SSD1306.h"
 
-const char* ssid     = "BrennerPl"; // Your ssid
-const char* password = "GoPackGo"; // Your Password
+#include "wifi-creds.h"
 
 #define DHTPIN  D6
 #define DHTTYPE DHT11
