@@ -1,6 +1,8 @@
-
 #include <DHT.h>
 #include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
 #include "SSD1306.h"
 
 #include "wifi-creds.h"
@@ -8,61 +10,119 @@
 #define DHTPIN  D6
 #define DHTTYPE DHT11
 
+WiFiClient espClient;
+PubSubClient client(espClient);
+
 DHT dht(DHTPIN, DHTTYPE);
 SSD1306  display(0x3c, D3, D4);
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP);
 
-void setup() {
+unsigned long timer; // the timer
+unsigned long INTERVAL = 10 * 60 * 1000; // the repeat interval
+
+double humidity;
+double temp_c;
+double temp_f;
+
+char msg[200];
+
+void connectWifi(void) {
   Serial.begin(115200);
-  delay(10);
-  
-  // Connect to WiFi network
-  WiFi.mode(WIFI_STA);
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-  
   WiFi.begin(ssid, password);
-  
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED){
     delay(500);
     Serial.print(".");
   }
-  Serial.println("");
-  Serial.println("WiFi connected");
-   
-  // Print the IP address
+  Serial.println();
+  Serial.print("connected, IP address: ");
   Serial.println(WiFi.localIP());
-
-  // Initialize screeen
-  display.init();
-  display.flipScreenVertically();
-  display.setFont(ArialMT_Plain_10);
 }
 
-void loop() {
-   delay(2000);
-   
-  // put your main code here, to run repeatedly:
+void connectQueue(char *ip) {
+  client.setServer(ip,1883);
+  
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    
+    // Create a random client ID
+    String clientId = "ESP8266Client-";
+    clientId += String(random(0xffff), HEX);
+    
+    // Attempt to connect
+    if (client.connect(clientId.c_str())) {
+      Serial.println("connected");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+
+void readSensor() {
   float h = dht.readHumidity();
   float t = dht.readTemperature();
   float f = dht.readTemperature(true);
 
-  Serial.print("Humidity: ");
-  Serial.print(h);
-  Serial.print(" %\t");
-  Serial.print("Temperature: ");
-  Serial.print(t);
-  Serial.print(" *C ");
-  Serial.print(f);
-  Serial.println(" *F\t");
+  if (!isnan(h)) humidity = h;
+  if (!isnan(t)) temp_c = t;
+  if (!isnan(f)) temp_f = f;
+}
 
-  // clear the display
+void updateDisplay() {
   display.clear();
   display.setTextAlignment(TEXT_ALIGN_LEFT);
   display.setFont(ArialMT_Plain_10);
-  display.drawString(0, 14, "Humidity: " + String(h, 1));
-  display.drawString(0, 25, "Temp(C):  " + String(t, 1));
-  display.drawString(0, 36, "Temp(F):  " + String(f, 1));
-  display.display();
+  display.drawString(0, 0, timeClient.getFormattedTime());
+  display.drawString(0, 14, "Humidity: " + String(humidity, 1));
+  display.drawString(0, 25, "Temperature: " + String(temp_f, 1));
+  display.display();  
+}
+
+void sendResults() {
+  connectQueue("192.168.1.2");
+  timeClient.update();
+
+  String m = "{\"hum\":" + String(humidity,1) + ","
+              "\"tempc\":" + String(temp_c,1) +  ","
+              "\"tempf\":" + String(temp_f,1) +  ","
+              "\"time\":\"" + timeClient.getFormattedTime() + "\"," +
+              "\"epoch\":" + String(timeClient.getEpochTime()) + "}";
+  client.publish("topic/weather",m.c_str());
+  Serial.println(m.c_str());
+}
+
+void setup() {
+  timer = millis();
+  Serial.begin(115200);
+  delay(10);
+  connectWifi();
+  timeClient.begin();
+  
+  // Initialize screeen
+  display.init();
+  display.flipScreenVertically();
+
+  timer = millis();
+
+  readSensor();
+  updateDisplay();
+}
+
+void loop() {
+  delay(500);
+
+  readSensor();
+
+  if (millis() > timer) {
+    sendResults();
+    timer = millis() + INTERVAL;
+  }
+
+  updateDisplay();
 }
 
