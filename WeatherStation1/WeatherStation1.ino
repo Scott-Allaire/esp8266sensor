@@ -16,7 +16,7 @@ PubSubClient client(espClient);
 DHT dht(DHTPIN, DHTTYPE);
 SSD1306  display(0x3c, D3, D4);
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP);
+NTPClient timeClient(ntpUDP, -6 * 3600);
 
 unsigned long timer; // the timer
 unsigned long INTERVAL = 10 * 60 * 1000; // the repeat interval
@@ -76,10 +76,12 @@ void readSensor() {
 void updateDisplay() {
   display.clear();
   display.setTextAlignment(TEXT_ALIGN_LEFT);
+  display.setFont(ArialMT_Plain_16);
+  display.drawString(0, 0, String(humidity, 1) + "%");
+  display.drawString(0, 17, String(temp_f, 1) + "°F");
+  
   display.setFont(ArialMT_Plain_10);
-  display.drawString(0, 0, timeClient.getFormattedTime());
-  display.drawString(0, 14, "Humidity: " + String(humidity, 1));
-  display.drawString(0, 25, "Temperature: " + String(temp_f, 1));
+  display.drawString(0, 50, timeClient.getFormattedTime());
   display.display();  
 }
 
@@ -105,7 +107,7 @@ void setup() {
   
   // Initialize screeen
   display.init();
-  display.flipScreenVertically();
+//  display.flipScreenVertically();
 
   timer = millis();
 
