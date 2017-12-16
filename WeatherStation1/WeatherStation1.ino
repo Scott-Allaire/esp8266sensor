@@ -24,6 +24,7 @@ unsigned long INTERVAL = 10 * 60 * 1000; // the repeat interval
 double humidity;
 double temp_c;
 double temp_f;
+double heat_index;
 
 char msg[200];
 
@@ -70,7 +71,10 @@ void readSensor() {
 
   if (!isnan(h)) humidity = h;
   if (!isnan(t)) temp_c = t;
-  if (!isnan(f)) temp_f = f;
+  if (!isnan(f)) {
+    temp_f = f;
+    heat_index = dht.computeHeatIndex(temp_f, humidity, true);
+  }
 }
 
 void updateDisplay() {
@@ -79,8 +83,10 @@ void updateDisplay() {
   display.setFont(ArialMT_Plain_16);
   display.drawString(0, 0, String(humidity, 1) + "%");
   display.drawString(0, 17, String(temp_f, 1) + "°F");
+  display.drawString(64, 17, String(heat_index, 1) + "°F");
   
   display.setFont(ArialMT_Plain_10);
+  display.drawString(64, 0, "Heat Index");
   display.drawString(0, 50, timeClient.getFormattedTime());
   display.display();  
 }
@@ -92,6 +98,7 @@ void sendResults() {
   String m = "{\"hum\":" + String(humidity,1) + ","
               "\"tempc\":" + String(temp_c,1) +  ","
               "\"tempf\":" + String(temp_f,1) +  ","
+              "\"heat_ind\":" + String(heat_index,1) +  ","
               "\"time\":\"" + timeClient.getFormattedTime() + "\"," +
               "\"epoch\":" + String(timeClient.getEpochTime()) + "}";
   client.publish("topic/weather",m.c_str());
